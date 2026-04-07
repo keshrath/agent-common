@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.3] - 2026-04-07
+
+- `startMcpServer`:
+  - `handleTool` may return a Promise (async tool handlers).
+  - `tools` may be a function returning the list (dynamic tool lists).
+  - New `formatResult(result, toolName)` to customize tool response text (e.g. append a trailing instructions footer).
+  - New `onToolCalled(name, args, notify)` post-response hook with an injected `notify(method, params)` callback for emitting JSON-RPC notifications like `notifications/tools/list_changed`.
+  - New `capabilities` option to override the default `{ tools: {} }` (e.g. `{ tools: { listChanged: true } }`).
+  - New `logLabel` for stderr error prefixes.
+  - `McpServerHandle` now exposes `notify(method, params)`.
+
 ## [1.0.2] - 2026-04-07
 
 - `setupWebSocket`:
