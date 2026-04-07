@@ -50,11 +50,22 @@ export interface RouterOptions {
   logError?: (err: unknown) => void;
 }
 
-export function json(res: ServerResponse, data: unknown, status = 200): void {
+export interface JsonOptions {
+  /** Extra headers merged with the default JSON response headers. */
+  extraHeaders?: Record<string, string>;
+}
+
+export function json(
+  res: ServerResponse,
+  data: unknown,
+  status = 200,
+  options: JsonOptions = {},
+): void {
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
     'X-Content-Type-Options': 'nosniff',
+    ...options.extraHeaders,
   });
   res.end(JSON.stringify(data));
 }
@@ -165,7 +176,25 @@ export function createRouter(options: RouterOptions = {}): Router {
   return { route, handle };
 }
 
-export function serveStatic(res: ServerResponse, baseDir: string, pathname: string): void {
+export interface ServeStaticOptions {
+  /**
+   * When true (default), missing files fall back to index.html (SPA behavior).
+   * Set to false to return 404 on any missing file — for non-SPA servers
+   * that want strict route matching.
+   */
+  spaFallback?: boolean;
+  /** Extra headers merged into the 200 response. */
+  extraHeaders?: Record<string, string>;
+}
+
+export function serveStatic(
+  res: ServerResponse,
+  baseDir: string,
+  pathname: string,
+  options: ServeStaticOptions = {},
+): void {
+  const spaFallback = options.spaFallback ?? true;
+
   let decoded: string;
   try {
     decoded = decodeURIComponent(pathname);
@@ -214,13 +243,25 @@ export function serveStatic(res: ServerResponse, baseDir: string, pathname: stri
     const content = readFileSync(realFilePath);
     const ext = extname(realFilePath);
     const mime = MIME_TYPES[ext] ?? 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' });
+    res.writeHead(200, {
+      'Content-Type': mime,
+      'Cache-Control': 'no-cache',
+      ...options.extraHeaders,
+    });
     res.end(content);
   } catch {
+    if (!spaFallback) {
+      res.writeHead(404);
+      res.end('Not found');
+      return;
+    }
     try {
       const indexPath = join(baseDir, 'index.html');
       const indexContent = readFileSync(indexPath);
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        ...options.extraHeaders,
+      });
       res.end(indexContent);
     } catch {
       res.writeHead(404);

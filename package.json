@@ -1,6 +1,6 @@
 {
   "name": "agent-common",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Shared foundation for agent-* MCP servers — SQLite, REST, WebSocket, MCP, cleanup, events, dashboard scaffolding",
   "type": "module",
   "main": "dist/index.js",
