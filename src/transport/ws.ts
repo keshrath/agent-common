@@ -5,9 +5,15 @@
 //   - getFingerprints(): an object whose keys are categories and values are
 //     short fingerprint strings derived from the DB. Polled every interval.
 //   - getCategoryData(category): returns the current data for a category.
-//   - getFullState(): returns the full state payload sent on connect.
-// The server diffs fingerprints between polls and only sends the changed
-// categories to each client.
+//     The returned object is SPREAD into the delta payload, so the consumer
+//     controls the keys — this lets one category push multiple related
+//     fields (e.g. messages + messageCount) in a single delta.
+//   - getFullState(): returns the full state payload sent on connect and
+//     on client `refresh`.
+//
+// Optional:
+//   - onMessage(ws, msg): handle custom client-to-server message types
+//     beyond the built-in `refresh`. Return true if handled.
 // =============================================================================
 
 import { WebSocketServer, WebSocket } from 'ws';
@@ -15,6 +21,8 @@ import type { Server } from 'http';
 
 export interface WsHandle {
   wss: WebSocketServer;
+  /** Send a raw JSON string to every open client. */
+  broadcast(message: string): void;
   close(): void;
 }
 
@@ -23,10 +31,21 @@ export interface WsOptions<F extends Record<string, string>> {
   httpServer: Server;
   /** Compute current fingerprints. Cheap query — runs every poll interval. */
   getFingerprints: () => F;
-  /** Fetch fresh data for a single changed category. */
-  getCategoryData: (category: keyof F) => unknown;
+  /**
+   * Fetch fresh data for a single changed category. Return an object that
+   * will be SPREAD into the delta payload (so the consumer controls keys).
+   * For the simple case, return `{ [category]: value }`. For bundled fields,
+   * return `{ messages: [...], messageCount: n }`.
+   */
+  getCategoryData: (category: keyof F) => Record<string, unknown>;
   /** Fetch full state payload (sent on connect and on client `refresh`). */
   getFullState: () => Record<string, unknown>;
+  /**
+   * Optional custom message handler. Called after `refresh` has been ruled out.
+   * Return true to signal the message was handled; false/undefined falls through
+   * to the default "unknown message type" error response.
+   */
+  onMessage?: (ws: WebSocket, msg: { type?: string; [key: string]: unknown }) => boolean | void;
   /** Max concurrent connections (default: 50). */
   maxConnections?: number;
   /** Max single message size in bytes (default: 4096). */
@@ -78,7 +97,8 @@ export function setupWebSocket<F extends Record<string, string>>(opts: WsOptions
 
     for (const key of Object.keys(currentFp) as Array<keyof F>) {
       if (prev[key] !== currentFp[key]) {
-        changed[key as string] = opts.getCategoryData(key);
+        const data = opts.getCategoryData(key);
+        Object.assign(changed, data);
         hasChanges = true;
       }
     }
@@ -121,17 +141,23 @@ export function setupWebSocket<F extends Record<string, string>>(opts: WsOptions
         return;
       }
 
-      const msg = parsed as { type?: string };
+      const msg = parsed as { type?: string; [key: string]: unknown };
       if (msg.type === 'refresh') {
         const state = clients.get(ws);
         if (state) state.fingerprints = null;
         sendFull(ws);
-      } else {
-        const safeType = String(msg.type ?? '')
-          .slice(0, 64)
-          .replace(/[<>&"']/g, '');
-        ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${safeType}` }));
+        return;
       }
+
+      if (opts.onMessage) {
+        const handled = opts.onMessage(ws, msg);
+        if (handled) return;
+      }
+
+      const safeType = String(msg.type ?? '')
+        .slice(0, 64)
+        .replace(/[<>&"']/g, '');
+      ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${safeType}` }));
     });
 
     ws.on('error', () => clients.delete(ws));
@@ -171,6 +197,13 @@ export function setupWebSocket<F extends Record<string, string>>(opts: WsOptions
 
   return {
     wss,
+    broadcast(message: string): void {
+      for (const [ws] of clients) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(message);
+        }
+      }
+    },
     close() {
       clearInterval(pingTimer);
       clearInterval(pollTimer);
