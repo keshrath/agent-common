@@ -6,6 +6,7 @@ export * from './types.js';
 export * from './storage/database.js';
 export * from './storage/fts.js';
 export * from './transport/rest.js';
+export * from './transport/rate-limit.js';
 export * from './transport/ws.js';
 export * from './transport/mcp.js';
 export * from './domain/events.js';

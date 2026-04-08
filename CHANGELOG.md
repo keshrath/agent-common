@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.1.0] - 2026-04-08
+
+### Added
+
+- **Rate limiter** (`transport/rate-limit.ts`) — IP-keyed fixed-window limiter
+  with optional secondary `heavy` bucket for expensive endpoints. Single
+  `createRateLimiter({ windows, cleanupIntervalMs?, getClientId? })` instance
+  manages both buckets, lazy cleanup of expired entries via an unref'd timer,
+  and exposes `check(req, bucket?)` and `dispose()`. Replaces the duplicated
+  rate-limit code in `agent-tasks` and `agent-knowledge`.
+- **Migration runner — `adoptUserVersion`** option on `runMigrations` (and
+  forwarded by `createDb`). When set, the runner seeds `_meta.schema_version`
+  from the legacy `pragma user_version` value before applying migrations,
+  letting consumers adopt agent-common's runner on existing DBs without
+  re-running migrations against tables that already exist. Removes the need
+  for the inline pre-open shim that `agent-discover` carried.
+- **`addColumnIfMissing(raw, table, column, definition)`** and
+  **`hasColumn(raw, table, column)`** — idempotent ALTER TABLE ADD COLUMN
+  helper backed by `PRAGMA table_info`. Saves boilerplate in any migration
+  that needs to remain safe to re-run on partially-migrated DBs.
+
 ## [1.0.3] - 2026-04-07
 
 - `startMcpServer`:

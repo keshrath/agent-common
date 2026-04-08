@@ -31,6 +31,13 @@ export interface DbOptions {
   migrations?: Migration[];
   /** Enable verbose logging to stderr. */
   verbose?: boolean;
+  /**
+   * If true, before running migrations, seed _meta.schema_version from the
+   * legacy `pragma user_version` value when _meta is empty and user_version > 0.
+   * Use this when adopting agent-common's migration runner on an existing DB
+   * that previously tracked its schema version via pragma user_version.
+   */
+  adoptUserVersion?: boolean;
 }
 
 export function createDb(options: DbOptions): Db {
@@ -44,7 +51,7 @@ export function createDb(options: DbOptions): Db {
   raw.pragma('foreign_keys = ON');
 
   if (options.migrations && options.migrations.length > 0) {
-    runMigrations(raw, options.migrations);
+    runMigrations(raw, options.migrations, { adoptUserVersion: options.adoptUserVersion });
   }
 
   return {
@@ -79,7 +86,20 @@ export function createDb(options: DbOptions): Db {
 // Migration runner
 // ---------------------------------------------------------------------------
 
-export function runMigrations(raw: Database.Database, migrations: Migration[]): void {
+export interface RunMigrationsOptions {
+  /**
+   * If true, seed _meta.schema_version from `pragma user_version` when _meta
+   * is empty and user_version > 0. Lets consumers adopt the runner on legacy
+   * DBs without re-running migrations against tables that already exist.
+   */
+  adoptUserVersion?: boolean;
+}
+
+export function runMigrations(
+  raw: Database.Database,
+  migrations: Migration[],
+  options: RunMigrationsOptions = {},
+): void {
   raw.exec(`
     CREATE TABLE IF NOT EXISTS _meta (
       key TEXT PRIMARY KEY,
@@ -87,9 +107,20 @@ export function runMigrations(raw: Database.Database, migrations: Migration[]): 
     )
   `);
 
-  const row = raw.prepare(`SELECT value FROM _meta WHERE key = 'schema_version'`).get() as
+  let row = raw.prepare(`SELECT value FROM _meta WHERE key = 'schema_version'`).get() as
     | { value: string }
     | undefined;
+
+  if (!row && options.adoptUserVersion) {
+    const userVersion = raw.pragma('user_version', { simple: true }) as number;
+    if (typeof userVersion === 'number' && userVersion > 0) {
+      raw
+        .prepare(`INSERT INTO _meta (key, value) VALUES ('schema_version', ?)`)
+        .run(String(userVersion));
+      row = { value: String(userVersion) };
+    }
+  }
+
   const currentVersion = row ? parseInt(row.value, 10) : 0;
 
   const sorted = [...migrations].sort((a, b) => a.version - b.version);
@@ -111,4 +142,32 @@ export function getSchemaVersion(raw: Database.Database): number {
     | { value: string }
     | undefined;
   return row ? parseInt(row.value, 10) : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Idempotent schema helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * ALTER TABLE ADD COLUMN guarded by a PRAGMA table_info check. No-op if the
+ * column already exists. Saves boilerplate in migrations that need to remain
+ * safe to re-run on partially-migrated DBs.
+ */
+export function addColumnIfMissing(
+  raw: Database.Database,
+  table: string,
+  column: string,
+  definition: string,
+): void {
+  const cols = raw.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (cols.some((c) => c.name === column)) return;
+  raw.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+/**
+ * Returns true if the given column exists on the given table.
+ */
+export function hasColumn(raw: Database.Database, table: string, column: string): boolean {
+  const cols = raw.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  return cols.some((c) => c.name === column);
 }
