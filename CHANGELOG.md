@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.1] - 2026-04-08
+
+### Fixed
+
+- **Migration runner** — wrap `runMigrations` in a `raw.transaction(...)` and
+  write `_meta.schema_version` after each individual migration (not only at
+  the end). A crash mid-run no longer leaves the DB in a "column added but
+  version unbumped" state, which previously wedged consumers permanently.
+- **WebSocket transport** — `setupWebSocket` now attaches an `error` listener
+  to the `WebSocketServer` instance. Without it, an underlying http-server
+  error (e.g. `EADDRINUSE` bubbling up from a port collision) re-emitted
+  through `wss` as an unhandled `error` event and crashed the host process,
+  defeating the dashboard try/catch in consumers.
+
 ## [1.1.0] - 2026-04-08
 
 ### Added

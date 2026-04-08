@@ -126,15 +126,20 @@ export function runMigrations(
   const sorted = [...migrations].sort((a, b) => a.version - b.version);
   const target = sorted.length > 0 ? sorted[sorted.length - 1].version : 0;
 
-  for (const m of sorted) {
-    if (m.version > currentVersion) {
-      m.up(raw);
+  const applyAll = raw.transaction(() => {
+    for (const m of sorted) {
+      if (m.version > currentVersion) {
+        m.up(raw);
+        raw
+          .prepare(`INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)`)
+          .run(String(m.version));
+      }
     }
-  }
-
-  raw
-    .prepare(`INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)`)
-    .run(String(target));
+    raw
+      .prepare(`INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)`)
+      .run(String(target));
+  });
+  applyAll();
 }
 
 export function getSchemaVersion(raw: Database.Database): number {

@@ -77,6 +77,9 @@ export function setupWebSocket<F extends Record<string, string>>(opts: WsOptions
     });
 
   const wss = new WebSocketServer({ server: opts.httpServer, maxPayload: maxMessageSize });
+  wss.on('error', (err) => {
+    logError(err);
+  });
   const clients = new Map<WebSocket, ClientState<F>>();
 
   function sendFull(ws: WebSocket): void {
