@@ -14,10 +14,14 @@
 // Optional:
 //   - onMessage(ws, msg): handle custom client-to-server message types
 //     beyond the built-in `refresh`. Return true if handled.
+//
+// Upgrades are checked against the request guard attached to the HTTP server
+// (loopback-only default), so foreign origins cannot open a socket.
 // =============================================================================
 
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Server } from 'http';
+import type { IncomingMessage, Server } from 'http';
+import { requestGuardFor } from './guard.js';
 
 export interface WsHandle {
   wss: WebSocketServer;
@@ -76,7 +80,13 @@ export function setupWebSocket<F extends Record<string, string>>(opts: WsOptions
       );
     });
 
-  const wss = new WebSocketServer({ server: opts.httpServer, maxPayload: maxMessageSize });
+  const guard = requestGuardFor(opts.httpServer);
+  const wss = new WebSocketServer({
+    server: opts.httpServer,
+    maxPayload: maxMessageSize,
+    verifyClient: ({ origin, req }: { origin: string; req: IncomingMessage }) =>
+      guard.checkHost(req.headers.host) && guard.checkOrigin(origin || undefined, req.headers.host),
+  });
   wss.on('error', (err) => {
     logError(err);
   });

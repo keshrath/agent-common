@@ -1,6 +1,6 @@
 {
   "name": "agent-common",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Shared foundation for agent-* MCP servers — SQLite, REST, WebSocket, MCP, cleanup, events, dashboard scaffolding",
   "type": "module",
   "main": "dist/index.js",
@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "better-sqlite3": "12.8.0",
-    "ws": "8.20.0"
+    "ws": "8.22.0"
   },
   "peerDependencies": {
     "better-sqlite3": ">=11",

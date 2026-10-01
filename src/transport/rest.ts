@@ -3,7 +3,7 @@
 //
 // Lightweight HTTP router using only node:http. Provides:
 //   - route(method, path, handler) with :param matching
-//   - json() helper with CORS + nosniff headers
+//   - json() helper with nosniff headers (CORS is the request guard's job)
 //   - readBody() with size limit + JSON object validation
 //   - serveStatic() with traversal + symlink protection
 //   - createRouter() returns a request handler that dispatches routes
@@ -63,7 +63,6 @@ export function json(
 ): void {
   res.writeHead(status, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
     'X-Content-Type-Options': 'nosniff',
     ...options.extraHeaders,
   });
@@ -124,16 +123,6 @@ export function createRouter(options: RouterOptions = {}): Router {
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      });
-      res.end();
-      return;
-    }
-
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
     const pathname = url.pathname;
 

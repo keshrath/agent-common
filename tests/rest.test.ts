@@ -69,14 +69,13 @@ describe('createRouter', () => {
     );
   });
 
-  it('handles OPTIONS preflight', async () => {
+  it('does not emit a wildcard CORS header', async () => {
     await withServer(
       async (base) => {
-        const res = await fetch(`${base}/api/anything`, { method: 'OPTIONS' });
-        expect(res.status).toBe(204);
-        expect(res.headers.get('access-control-allow-methods')).toContain('POST');
+        const res = await fetch(`${base}/api/hello`);
+        expect(res.headers.get('access-control-allow-origin')).toBeNull();
       },
-      () => {},
+      (r) => r.route('GET', '/api/hello', (_req, res) => json(res, { msg: 'hi' })),
     );
   });
 });

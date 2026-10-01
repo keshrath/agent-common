@@ -5,9 +5,9 @@
 ```
 src/
   storage/    database (better-sqlite3 + migration runner), fts (FTS5 helpers)
-  transport/  rest (node:http router), ws (delta-polling WebSocket), mcp (JSON-RPC over stdio)
+  transport/  rest (node:http router), guard (Host/Origin/Content-Type policy), ws (delta-polling WebSocket), mcp (JSON-RPC over stdio)
   domain/     events (typed EventBus), cleanup (base retention service)
-  dashboard.ts        port leader-election + graceful start
+  dashboard.ts        port leader-election + graceful start, 127.0.0.1 bind + request guard
   package-meta.ts     read consumer name/version from package.json
   index.ts            barrel exports
 ```
